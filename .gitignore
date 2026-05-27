@@ -1,0 +1,20 @@
+# Environment
+.env
+
+# Workspace — binary samples and analysis output are NOT committed
+workspace/binaries/*
+workspace/ghidra-projects/*
+workspace/reports/*
+
+# Keep the folder structure
+!workspace/binaries/.gitkeep
+!workspace/ghidra-projects/.gitkeep
+!workspace/reports/.gitkeep
+
+# Skills are populated by setup-skills.sh — not committed (sourced from main repo)
+skills/*
+!skills/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,35 @@
+services:
+
+  ghidra:
+    # CyberHawk RE — GhidraMCP v5.12.0 AI-controlled reverse engineering
+    # 183 MCP tools: decompile, disassemble, xrefs, rename, search, debugger, etc.
+    #
+    # MCP endpoint: http://<your-server-ip>:8081/mcp  (streamable-http)
+    # Start:        docker compose up -d
+    # Load binary:  docker exec cyberhawk-re-ghidra /load_binary.sh /workspace/binaries/<file>
+    # Import via MCP: use mcp__ghidra__import_file tool in Claude Code
+    build:
+      context: ./cyberhawk-ghidra
+      dockerfile: Dockerfile
+    container_name: cyberhawk-re-ghidra
+    restart: unless-stopped
+    shm_size: '2gb'
+    ports:
+      - "8081:8081"   # MCP streamable-http bridge — Claude Code connects here
+    volumes:
+      - ./workspace:/workspace                        # bind-mount: drop binaries, read reports
+      - ./skills:/workspace/.agents/skills:ro         # RE skills (read-only)
+    environment:
+      - JAVA_OPTS=-Xmx4g -XX:+UseG1GC               # Increase to -Xmx8g for large binaries
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8089/check_connection"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    networks:
+      - re-net
+
+networks:
+  re-net:
+    driver: bridge
