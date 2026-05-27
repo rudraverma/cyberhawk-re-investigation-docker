@@ -69,13 +69,15 @@ ENV GHIDRA_HOME=/opt/ghidra
 RUN mkdir -p /app
 COPY --from=builder /build/target/GhidraMCP-*.jar /app/GhidraMCP.jar
 
-# Download MCP bridge + requirements from v5.12.0 release
-RUN curl -sL "https://github.com/bethington/ghidra-mcp/releases/download/v5.12.0/bridge_mcp_ghidra.py" \
-        -o /app/bridge_mcp_ghidra.py \
-    && curl -sL "https://github.com/bethington/ghidra-mcp/releases/download/v5.12.0/requirements.txt" \
+# Install bridge requirements from upstream release
+RUN curl -sL "https://github.com/bethington/ghidra-mcp/releases/download/v5.12.0/requirements.txt" \
         -o /tmp/bridge_requirements.txt \
     && pip3 install --no-cache-dir -r /tmp/bridge_requirements.txt \
     && rm /tmp/bridge_requirements.txt
+
+# Patched bridge: TCP reconnect + keepalive heartbeat (replaces upstream download)
+# Fixes: duplicate lock bug, no TCP reconnect path, no heartbeat daemon
+COPY bridge_mcp_ghidra.py /app/bridge_mcp_ghidra.py
 
 # Workspace directories
 RUN mkdir -p /workspace/binaries /workspace/ghidra-projects /workspace/reports /data /projects
@@ -90,6 +92,7 @@ ENV GHIDRA_MCP_PORT=8089
 ENV GHIDRA_MCP_URL=http://127.0.0.1:8089
 ENV MCP_BRIDGE_PORT=8081
 ENV JAVA_OPTS="-Xmx4g -XX:+UseG1GC"
+ENV GHIDRA_MCP_HEARTBEAT_INTERVAL=30
 
 EXPOSE 8081 8089
 

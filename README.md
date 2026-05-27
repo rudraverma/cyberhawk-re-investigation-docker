@@ -502,6 +502,7 @@ cyberhawk-re-investigation-docker/
 ├── cyberhawk-ui/             ← React web interface
 ├── cyberhawk-ghidra/         ← ⭐ CyberHawk GhidraMCP RE engine
 │   ├── Dockerfile            ← Ghidra 12.1 headless multi-stage build
+│   ├── bridge_mcp_ghidra.py  ← Patched MCP bridge (TCP reconnect + keepalive)
 │   ├── entrypoint.sh         ← Java server → Python MCP bridge
 │   └── load_binary.sh        ← Fallback binary importer
 ├── sift-remnux/              ← SIFT + REMnux forensics container
@@ -529,14 +530,215 @@ cyberhawk-re-investigation-docker/
 
 ## Troubleshooting
 
-**Ghidra MCP shows "Session not found"**
-→ Container restarted and Claude Code is using a stale session. Restart Claude Code.
+### Quick-Reference — Is Ghidra Actually Working?
 
-**Container shows "unhealthy" for 60–90s**
-→ Normal. Ghidra takes time to initialize. Watch `docker logs -f cyberhawk-ghidra` and wait for `Headless server UP`.
+Run this to check all three layers in one go (on the Ubuntu server):
 
-**Out of memory / Ghidra crash**
-→ Increase heap in `docker-compose.yml`: `JAVA_OPTS=-Xmx8g -XX:+UseG1GC`
+```bash
+# 1. Is the container running?
+docker ps | grep ghidra
+
+# 2. Is the Java server alive?
+curl -sf http://localhost:8089/check_connection && echo "Java server OK"
+
+# 3. Is the MCP bridge alive?
+curl -sf http://localhost:8083/mcp && echo "Bridge OK"
+
+# 4. Tail logs for live state
+docker logs --tail=50 cyberhawk-ghidra
+```
+
+---
+
+### Understanding `server_status` — Port 13100 is NOT the MCP Bridge
+
+The `mcp__ghidra__server_status` tool reports:
+
+```json
+{ "connected": false, "port": 13100, "server_type": "ghidra_server" }
+```
+
+**This is NORMAL and does NOT mean Ghidra is broken.**
+
+- Port `13100` is Ghidra's collaborative **Team Server** (multi-analyst shared projects). It is not used in this headless setup.
+- `connected: false` simply means no Team Server is configured — expected for single-analyst operation.
+- The actual MCP health is port `8083` (MCP bridge) ← `8081` (Python bridge) ← `8089` (Java headless server).
+
+To verify MCP health, call `mcp__ghidra__list_instances` or `mcp__ghidra__get_current_program_info` instead.
+
+---
+
+### Problem: Ghidra MCP shows "Session not found" or tools return errors
+
+**Cause:** Container was restarted (or OOM-killed) and Claude Code is holding a stale HTTP session.
+
+**Fix:**
+1. Confirm the container is running: `docker ps | grep ghidra`
+2. If not running: `docker compose --profile reverse-eng up -d ghidra`
+3. Wait for `Headless server UP` in logs: `docker logs -f cyberhawk-ghidra`
+4. **Restart Claude Code** — this is mandatory after any container restart.
+
+> The bridge session is established at Claude Code startup. Restarting the container invalidates the session; there is no way to refresh it without restarting Claude Code.
+
+---
+
+### Problem: Container is running but tools are failing / bridge seems disconnected
+
+**Cause:** Java server restarted without the container restarting (e.g. OOM inside container). The upstream bridge (v5.12.0 unpatched) had no TCP reconnect path and would stay disconnected forever.
+
+**This is fixed in the patched bridge** — the keepalive heartbeat (every 30s) detects disconnection and automatically reconnects. Check the logs:
+
+```bash
+docker logs --tail=100 cyberhawk-ghidra | grep -E "(keepalive|reconnect|WARN|ERROR)"
+```
+
+Healthy reconnect looks like:
+```
+WARNING [keepalive] Java server unreachable (Connection refused) — reconnecting
+INFO    [keepalive] Java server alive but bridge lost state — reconnecting
+INFO    Auto-connected, registered 183 tools
+```
+
+If reconnect is still failing after 2-3 minutes, restart the container:
+```bash
+docker restart cyberhawk-ghidra
+# Then restart Claude Code
+```
+
+---
+
+### Problem: Container is "unhealthy" for 60–90s after start
+
+**Cause:** Normal — Ghidra 12.1 takes 30–90s to initialize on first load.
+
+**Fix:** Wait. Watch the logs:
+```bash
+docker logs -f cyberhawk-ghidra
+```
+
+Ready when you see:
+```
+[GhidraMCP] Headless server UP after 33s ✓
+INFO: Auto-connected, registered 183 tools
+INFO: [keepalive] Heartbeat started (interval=30s)
+INFO: MCP endpoint: http://0.0.0.0:8081/mcp
+```
+
+---
+
+### Problem: Out of memory / Ghidra crash on large binaries
+
+**Cause:** 4GB heap default (Xmx4g) is insufficient for the binary.
+
+**Fix:** Increase heap in `docker-compose.yml`:
+```yaml
+environment:
+  JAVA_OPTS: "-Xmx8g -XX:+UseG1GC"
+```
+Then restart: `docker compose --profile reverse-eng up -d ghidra`
+
+---
+
+### Problem: Analysis is very slow
+
+**Cause:** Default heap (4GB) thrashing GC. Large binaries with auto-analysis can spike memory.
+
+**Fix:** Add G1GC tuning flags:
+```yaml
+environment:
+  JAVA_OPTS: "-Xmx8g -Xms2g -XX:+UseG1GC -XX:G1HeapRegionSize=32m"
+```
+
+---
+
+### How to Rebuild the Bridge After Making Changes
+
+The bridge (`bridge_mcp_ghidra.py`) is now `COPY`ed from the local build context — edits to the local file take effect on the next build. Only the final COPY layers rebuild (fast, ~10s — Ghidra/Maven layers are cached):
+
+```bash
+# On the server
+cd /home/cyberhawk/docker/compose-files/cyberhawk-docker
+
+# Edit bridge on server first (or sync from local)
+# Then rebuild just the ghidra service (fast — only COPY layers change)
+docker compose build ghidra
+docker compose --profile reverse-eng up -d ghidra
+
+# Verify
+docker logs -f cyberhawk-ghidra
+```
+
+To change the heartbeat interval without rebuilding:
+```yaml
+# In docker-compose.yml, under ghidra service:
+environment:
+  GHIDRA_MCP_HEARTBEAT_INTERVAL: "60"   # ping every 60s instead of 30
+```
+
+---
+
+### Keepalive / Heartbeat Architecture (for reference)
+
+The patched bridge (`bridge_mcp_ghidra.py`) contains 4 fixes over upstream v5.12.0:
+
+| Fix | What it does |
+|---|---|
+| **1 — Lock dedup** | Removed duplicate `asyncio.Lock()` that was silently shadowed by `threading.Lock()` |
+| **2 — TCP reconnect** | `_try_reconnect()` now has a TCP path — recovers when Java server restarts inside the container |
+| **3 — Heartbeat daemon** | Background thread pings `/check_connection` every 30s, clears state and calls `_auto_connect()` on failure |
+| **4 — main() wiring** | Heartbeat is started after `_auto_connect()` in `main()`, honoring `GHIDRA_MCP_HEARTBEAT_INTERVAL` env var |
+
+**What happens when Java server dies and recovers:**
+1. Heartbeat thread fails to ping `/check_connection` → logs `[keepalive] Java server unreachable`
+2. Sets `_active_tcp = None`, `_transport_mode = "none"`
+3. Calls `_auto_connect()` → `_try_reconnect()` → TCP path re-establishes connection
+4. `_fetch_and_register_schema()` re-registers all 183 tools
+5. Bridge is fully operational again without any container restart
+
+**If Claude Code's session still shows errors after reconnect:** Restart Claude Code — HTTP sessions established before the reconnect are stale.
+
+---
+
+### Full Recovery Procedure (When Everything Is Broken)
+
+Follow this exact order:
+
+```bash
+# Step 1 — Check what's running
+docker ps | grep ghidra
+
+# Step 2 — Stop the container cleanly
+docker compose --profile reverse-eng stop ghidra
+
+# Step 3 — Start fresh
+docker compose --profile reverse-eng up -d ghidra
+
+# Step 4 — Wait for ready (watch logs)
+docker logs -f cyberhawk-ghidra
+# Wait for: "Headless server UP" and "registered 183 tools"
+
+# Step 5 — Restart Claude Code (mandatory)
+# Close Claude Code → reopen it
+# The MCP session refreshes on startup
+
+# Step 6 — Verify with a test call
+# In Claude Code: ask "call mcp__ghidra__list_instances"
+```
+
+---
+
+### Log Reference
+
+| Log line | Meaning |
+|---|---|
+| `[GhidraMCP] Headless server UP after Xs ✓` | Java server ready — bridge is about to connect |
+| `INFO: Auto-connected, registered 183 tools` | Bridge connected, all tools live |
+| `INFO: [keepalive] Heartbeat started (interval=30s)` | Keepalive daemon running — bridge is healthy |
+| `WARNING [keepalive] Java server unreachable` | Java server died — reconnect in progress |
+| `INFO: [reconnect] Reconnected via TCP to http://127.0.0.1:8089` | Auto-recovery succeeded |
+| `ERROR: [reconnect] TCP reconnect failed` | Java server not back yet — will retry on next heartbeat |
+| `connected: false, port: 13100` | Normal — Team Server not configured, ignore this |
+| `WARNING: headless server did not respond in 120s` | Java server took >2 min to start — bridge is up but waiting |
 
 ---
 
