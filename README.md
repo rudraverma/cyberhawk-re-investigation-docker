@@ -163,25 +163,298 @@ Claude will:
 4. Call `mcp__ghidra__import_file` — load into Ghidra with auto-analysis
 5. Use Ghidra RE tools to decompile, trace xrefs, extract crypto, identify C2
 
-### Step 3 — Deep RE with Ghidra tools
+### Step 3 — Deep RE with Ghidra (183 MCP Tools)
 
-183 tools are available. Key ones:
+All 183 tools are directly callable by Claude Code. Organized by category:
+
+#### 📂 Program & Project Management (19 tools)
 
 | Tool | Purpose |
 |---|---|
-| `import_file` | Import binary into Ghidra project with auto-analysis |
-| `decompile_function` | Decompile any function to C pseudocode |
-| `list_functions` | All functions in the binary |
-| `list_imports` | All imported symbols |
-| `get_xrefs_to` / `get_xrefs_from` | Trace call graphs |
-| `search_strings` | Extract all strings |
-| `detect_crypto_constants` | Find AES/RC4/SHA S-boxes automatically |
-| `detect_malware_behaviors` | Flag suspicious patterns |
-| `extract_iocs_with_context` | Extract IOCs with surrounding context |
-| `search_byte_patterns` | Scan for byte sequences |
-| `rename_function` / `rename_variable` | Annotate as you understand the code |
+| `import_file` | Import binary + auto-analyze into Ghidra project |
+| `open_program` / `close_program` | Open/close a loaded program |
+| `open_project` / `close_project` | Open/close a Ghidra project |
+| `create_project` | Create a new Ghidra project |
+| `load_program` | Load program from file path |
+| `load_program_from_project` | Load existing program from project |
+| `list_instances` | List active Ghidra project instances |
+| `connect_instance` | Switch to a different instance |
+| `list_open_programs` | List all currently open programs |
+| `get_project_info` | Project metadata and stats |
+| `get_current_program_info` | Currently active program info |
+| `get_metadata` | Binary metadata (arch, OS, compiler, format) |
+| `list_project_files` | Files inside the Ghidra project |
+| `save_program` / `save_all_programs` | Save analysis state |
+| `switch_program` | Switch active program context |
+| `delete_file` | Remove file from project |
+| `create_folder` | Create folder in project |
+| `get_entry_points` | Get binary entry points |
+
+#### 🔬 Decompile & Disassemble (17 tools)
+
+| Tool | Purpose |
+|---|---|
+| `decompile_function` | Decompile function to C pseudocode |
+| `force_decompile` | Decompile with forced re-analysis |
+| `disassemble_function` | Full assembly listing for a function |
+| `disassemble_bytes` | Disassemble raw bytes at address |
 | `batch_decompile` | Decompile multiple functions at once |
-| `debugger_*` | Full debugger suite — attach, breakpoints, step, memory |
+| `get_function_pcode` | Get P-Code (Ghidra IR) for a function |
+| `get_assembly_context` | Assembly with surrounding context |
+| `analyze_control_flow` | Control flow graph analysis |
+| `analyze_dataflow` | Data flow / taint analysis |
+| `analyze_function_complete` | Full function analysis pass |
+| `analyze_function_completeness` | Check analysis coverage |
+| `analyze_call_graph` | Call graph for a function |
+| `analyze_api_call_chains` | Trace API call chains |
+| `batch_analyze_completeness` | Batch completeness check |
+| `analysis_status` | Current analysis status |
+| `reanalyze` | Re-run analysis on program |
+| `run_analysis` | Run specific analyzer |
+| `list_analyzers` | List available analyzers |
+
+#### 🔧 Functions (31 tools)
+
+| Tool | Purpose |
+|---|---|
+| `list_functions` | All functions in binary |
+| `list_functions_enhanced` | Functions with extra metadata |
+| `search_functions` | Search functions by name |
+| `search_functions_enhanced` | Advanced function search |
+| `search_functions_by_tag` | Find functions by tag |
+| `get_function_by_address` | Get function at address |
+| `get_function_count` | Total function count |
+| `get_function_signature` | Function signature / prototype |
+| `get_function_variables` | Local variables and params |
+| `get_function_callers` | Who calls this function |
+| `get_function_callees` | Who this function calls |
+| `get_function_call_graph` | Full call graph for function |
+| `get_full_call_graph` | Whole-binary call graph |
+| `get_function_xrefs` | All cross-references to/from function |
+| `get_function_jump_targets` | Jump targets inside function |
+| `get_function_hash` | Hash for function similarity |
+| `get_bulk_function_hashes` | Hash many functions at once |
+| `get_function_labels` | Labels defined in function |
+| `get_function_tags` | Tags attached to function |
+| `get_function_documentation` | Docs/comments on function |
+| `create_function` | Create function at address |
+| `delete_function` | Remove function definition |
+| `rename_function` | Rename a function by name |
+| `rename_function_by_address` | Rename function by address |
+| `set_function_prototype` | Set full function signature |
+| `set_function_no_return` | Mark function as noreturn |
+| `create_function_signature` | Create/update signature |
+| `validate_function_prototype` | Validate prototype syntax |
+| `find_similar_functions` | Find functionally similar functions |
+| `find_similar_functions_fuzzy` | Fuzzy similarity matching |
+| `find_next_undefined_function` | Next unanalyzed function |
+| `find_dead_code` | Detect unreachable code |
+| `find_code_gaps` | Find gaps in code coverage |
+
+#### 🏷️ Labels & Naming (7 tools)
+
+| Tool | Purpose |
+|---|---|
+| `create_label` | Create label at address |
+| `rename_label` | Rename existing label |
+| `delete_label` | Remove label |
+| `batch_create_labels` | Create many labels at once |
+| `batch_delete_labels` | Delete many labels at once |
+| `rename_or_label` | Rename or create if absent |
+| `can_rename_at_address` | Check if rename is valid |
+
+#### 📝 Variables & Parameters (10 tools)
+
+| Tool | Purpose |
+|---|---|
+| `rename_variable` | Rename local variable |
+| `rename_variables` | Rename multiple variables |
+| `batch_rename_function_components` | Bulk rename vars/params |
+| `set_variable_storage` | Set storage location for variable |
+| `set_variables` | Set multiple variable properties |
+| `set_local_variable_type` | Set type of local variable |
+| `set_parameter_type` | Set type of function parameter |
+| `get_field_access_context` | Context around struct field access |
+| `suggest_field_names` | AI-suggest names for struct fields |
+| `audit_globals_in_function` | Audit global usage in function |
+
+#### 💬 Comments & Documentation (13 tools)
+
+| Tool | Purpose |
+|---|---|
+| `set_decompiler_comment` | Add comment in decompiler view |
+| `set_disassembly_comment` | Add comment in disassembly |
+| `set_plate_comment` | Set function header comment |
+| `get_plate_comment` | Get function header comment |
+| `clear_function_comments` | Clear all comments in function |
+| `batch_set_comments` | Set many comments at once |
+| `set_function_tag_comment` | Comment on a function tag |
+| `apply_function_documentation` | Apply docs to function |
+| `analyze_for_documentation` | Suggest documentation |
+| `compare_programs_documentation` | Diff docs between programs |
+| `merge_program_documentation` | Merge docs from another program |
+| `find_undocumented_by_string` | Find functions with matching strings but no docs |
+| `archive_ingest_function` | Ingest function into archive |
+| `archive_ingest_program` | Ingest program into archive |
+
+#### 🧱 Data Types & Structures (26 tools)
+
+| Tool | Purpose |
+|---|---|
+| `create_struct` | Create a new struct type |
+| `add_struct_field` | Add field to struct |
+| `remove_struct_field` | Remove field from struct |
+| `modify_struct_field` | Modify existing struct field |
+| `get_struct_layout` | Full struct memory layout |
+| `analyze_struct_field_usage` | How struct fields are accessed |
+| `create_typedef` | Create type alias |
+| `create_union` | Create union type |
+| `create_enum` | Create enum type |
+| `get_enum_values` | Get all enum values |
+| `create_array_type` | Create array type |
+| `create_pointer_type` | Create pointer type |
+| `clone_data_type` | Clone existing type |
+| `delete_data_type` | Remove data type |
+| `apply_data_type` | Apply type to address |
+| `apply_data_classification` | Classify data (code/data/etc) |
+| `validate_data_type` | Validate type definition |
+| `validate_data_type_exists` | Check type exists |
+| `search_data_types` | Search type library |
+| `get_valid_data_types` | List valid types for address |
+| `list_data_types` | All data types in program |
+| `list_data_type_categories` | Data type categories |
+| `create_data_type_category` | Create type category |
+| `move_data_type_to_category` | Move type to category |
+| `import_data_types` | Import types from header/archive |
+| `get_type_size` | Get size of data type |
+
+#### 🔗 Imports, Exports & Cross-References (9 tools)
+
+| Tool | Purpose |
+|---|---|
+| `list_imports` | All imported symbols |
+| `list_exports` | All exported symbols |
+| `get_xrefs_to` | Cross-references TO an address |
+| `get_xrefs_from` | Cross-references FROM an address |
+| `get_bulk_xrefs` | Bulk xref lookup |
+| `list_data_items` | All defined data items |
+| `list_data_items_by_xrefs` | Data items filtered by xrefs |
+| `list_external_locations` | External library references |
+| `get_external_location` | Detail on external location |
+| `rename_external_location` | Rename external symbol |
+
+#### 🦠 Malware Analysis (8 tools)
+
+| Tool | Purpose |
+|---|---|
+| `detect_crypto_constants` | Find AES/RC4/SHA/DES S-boxes automatically |
+| `detect_malware_behaviors` | Flag suspicious API patterns and behaviors |
+| `extract_iocs_with_context` | Extract IOCs with surrounding code context |
+| `find_anti_analysis_techniques` | Detect anti-debug, anti-VM, obfuscation |
+| `emulate_function` | Emulate function execution |
+| `emulate_hash_batch` | Emulate hash routines in batch |
+| `detect_array_bounds` | Detect array bounds (overflow research) |
+| `diff_functions` | Diff two functions for similarity/diff |
+
+#### 🧠 Memory & Segments (10 tools)
+
+| Tool | Purpose |
+|---|---|
+| `read_memory` | Read raw bytes from address |
+| `inspect_memory_content` | Inspect and interpret memory content |
+| `search_byte_patterns` | Scan for byte sequences / shellcode |
+| `search_instructions` | Search for instruction patterns |
+| `create_memory_block` | Create new memory block |
+| `set_image_base` | Rebase image to new address |
+| `get_address_spaces` | All address spaces |
+| `list_segments` | Memory segments / sections |
+| `get_language_metadata` | Processor language metadata |
+| `convert_number` | Convert between number bases |
+
+#### 🔍 Strings & Search (5 tools)
+
+| Tool | Purpose |
+|---|---|
+| `list_strings` | All strings in binary |
+| `search_strings` | Search strings by pattern |
+| `batch_string_anchor_report` | Batch string → function mapping |
+| `bulk_fuzzy_match` | Fuzzy match functions/strings |
+| `find_undocumented_by_string` | Find funcs with strings but no comments |
+
+#### 🏷️ Tags & Bookmarks (11 tools)
+
+| Tool | Purpose |
+|---|---|
+| `create_function_tag` | Create a new function tag |
+| `delete_function_tag` | Delete a function tag |
+| `add_function_tag` | Add tag to function |
+| `remove_function_tag` | Remove tag from function |
+| `batch_add_function_tags` | Tag many functions at once |
+| `batch_remove_function_tags` | Remove tags from many functions |
+| `list_function_tags` | All defined tags |
+| `get_function_tags` | Tags on a specific function |
+| `set_bookmark` | Set bookmark at address |
+| `delete_bookmark` | Remove bookmark |
+| `list_bookmarks` | All bookmarks in program |
+
+#### 🏛️ Classes, Namespaces & Globals (11 tools)
+
+| Tool | Purpose |
+|---|---|
+| `list_classes` | All classes (OOP binaries) |
+| `list_methods` | Methods in a class |
+| `list_namespaces` | All namespaces |
+| `list_globals` | All global variables |
+| `audit_global` | Audit usage of a global |
+| `set_global` | Set value of global |
+| `rename_global_variable` | Rename global variable |
+| `rename_data` | Rename data item |
+| `list_calling_conventions` | Available calling conventions |
+
+#### 🐛 Debugger Suite (22 tools)
+
+| Tool | Purpose |
+|---|---|
+| `debugger_attach` | Attach debugger to process |
+| `debugger_detach` | Detach debugger |
+| `debugger_status` | Current debugger state |
+| `debugger_set_breakpoint` | Set breakpoint at address |
+| `debugger_remove_breakpoint` | Remove breakpoint |
+| `debugger_list_breakpoints` | All active breakpoints |
+| `debugger_continue` | Resume execution |
+| `debugger_step_into` | Step into next instruction |
+| `debugger_step_over` | Step over next instruction |
+| `debugger_registers` | Read all register values |
+| `debugger_read_memory` | Read memory via debugger |
+| `debugger_stack_trace` | Full call stack |
+| `debugger_modules` | Loaded modules/libraries |
+| `debugger_read_args` | Read function arguments |
+| `debugger_resolve_ordinal` | Resolve import by ordinal |
+| `debugger_trace_function` | Start function trace |
+| `debugger_trace_list` | List active traces |
+| `debugger_trace_log` | Get trace log output |
+| `debugger_trace_stop` | Stop tracing |
+| `debugger_watch_memory` | Watch memory address for changes |
+| `debugger_watch_log` | Get memory watch log |
+| `debugger_watch_stop` | Stop memory watch |
+
+#### 📜 Scripts (3 tools)
+
+| Tool | Purpose |
+|---|---|
+| `list_scripts` | List available Ghidra scripts |
+| `run_ghidra_script` | Run a named Ghidra script |
+| `run_script_inline` | Execute inline Groovy/Python script |
+
+#### ⚙️ Tool Groups & Server (6 tools)
+
+| Tool | Purpose |
+|---|---|
+| `server_status` | Ghidra headless server health |
+| `check_tools` | Verify available tools |
+| `list_tool_groups` | List lazy-loaded tool categories |
+| `load_tool_group` | Load tool group into session |
+| `unload_tool_group` | Unload tool group |
 
 ---
 
