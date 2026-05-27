@@ -11,9 +11,8 @@ workspace/reports/*
 !workspace/ghidra-projects/.gitkeep
 !workspace/reports/.gitkeep
 
-# Skills are populated by setup-skills.sh — not committed (sourced from main repo)
-skills/*
-!skills/.gitkeep
+# Skills are physically bundled — all 42 RE specialist skills tracked in git
+# skills/ is fully committed — no setup script needed
 
 # OS
 .DS_Store

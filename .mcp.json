@@ -1,8 +1,12 @@
 {
   "mcpServers": {
+    "cyberhawk": {
+      "type": "http",
+      "url": "http://<your-server-ip>:3002/mcp"
+    },
     "ghidra": {
       "type": "http",
-      "url": "http://<your-server-ip>:8081/mcp"
+      "url": "http://<your-server-ip>:8083/mcp"
     }
   }
 }

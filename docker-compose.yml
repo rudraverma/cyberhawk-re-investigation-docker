@@ -1,35 +1,134 @@
 services:
 
+  cyberhawk-ui:
+    build:
+      context: ./cyberhawk-ui
+      dockerfile: Dockerfile
+    container_name: cyberhawk-ui
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    depends_on:
+      cyberhawk-api:
+        condition: service_healthy
+    networks:
+      - cyberhawk-net
+
+  cyberhawk-api:
+    build:
+      context: ./cyberhawk-api
+      dockerfile: Dockerfile
+    container_name: cyberhawk-api
+    restart: unless-stopped
+    ports:
+      - "3002:8000"
+    volumes:
+      - cyberhawk-data:/workspace
+      - ./skills:/workspace/.agents/skills:ro
+      - ./workspace/config:/workspace/config
+      - ./cyberhawk-api/app:/app/app
+    env_file:
+      - .env
+    environment:
+      - WORKSPACE=/workspace
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - cyberhawk-net
+
+  # ── Specialist containers ────────────────────────────────────────────────────
+  # All mount cyberhawk-data:/workspace to share evidence + cases
+
+  sift-remnux:
+    # Full SIFT + REMnux — CORE forensics container (malware, disk, memory analysis)
+    build:
+      context: ./sift-remnux
+      dockerfile: Dockerfile
+    container_name: cyberhawk-sift-remnux
+    restart: unless-stopped
+    ports:
+      - "2233:22"
+    volumes:
+      - cyberhawk-data:/workspace
+    cap_add:
+      - SYS_ADMIN
+      - MKNOD
+    privileged: true
+    devices:
+      - "/dev/fuse:/dev/fuse"
+    networks:
+      - cyberhawk-net
+
+  cracking:
+    # hashcat v7.1.1 (CPU/POCL) + John the Ripper
+    build:
+      context: ./cracking
+      dockerfile: Dockerfile
+    container_name: cyberhawk-cracking
+    restart: unless-stopped
+    volumes:
+      - cyberhawk-data:/workspace
+    networks:
+      - cyberhawk-net
+
+  crypto-email:
+    # GPG + email forensics — eml analysis, mpack, swaks, OpenSSL
+    build:
+      context: ./crypto-email
+      dockerfile: Dockerfile
+    container_name: cyberhawk-crypto-email
+    restart: unless-stopped
+    volumes:
+      - cyberhawk-data:/workspace
+    networks:
+      - cyberhawk-net
+
+  kali:
+    # Pentesting tools — ON-DEMAND ONLY
+    # Start with: docker compose --profile pentest up -d kali
+    profiles: ["pentest"]
+    build:
+      context: ./kali
+      dockerfile: Dockerfile
+    container_name: cyberhawk-kali
+    restart: unless-stopped
+    volumes:
+      - cyberhawk-data:/workspace
+    networks:
+      - cyberhawk-net
+
   ghidra:
-    # CyberHawk RE — GhidraMCP v5.12.0 AI-controlled reverse engineering
-    # 183 MCP tools: decompile, disassemble, xrefs, rename, search, debugger, etc.
+    # ── CyberHawk RE — AI-controlled reverse engineering via MCP ──────────────
+    # 183 Ghidra tools exposed to Claude Code: decompile, disassemble, xrefs,
+    # rename, search memory, crypto detection, debugger suite, and more.
     #
-    # MCP endpoint: http://<your-server-ip>:8081/mcp  (streamable-http)
-    # Start:        docker compose up -d
-    # Load binary:  docker exec cyberhawk-re-ghidra /load_binary.sh /workspace/binaries/<file>
-    # Import via MCP: use mcp__ghidra__import_file tool in Claude Code
+    # Start: docker compose --profile reverse-eng up -d ghidra
+    # Upload evidence via cyberhawk-ui → auto-visible at /workspace/upload/
+    # Import via Claude Code: mcp__ghidra__import_file /workspace/upload/<file>
+    profiles: ["reverse-eng"]
     build:
       context: ./cyberhawk-ghidra
       dockerfile: Dockerfile
-    container_name: cyberhawk-re-ghidra
+    container_name: cyberhawk-ghidra
     restart: unless-stopped
     shm_size: '2gb'
     ports:
-      - "8081:8081"   # MCP streamable-http bridge — Claude Code connects here
+      - "8083:8081"   # MCP streamable-http — Claude Code connects here
     volumes:
-      - ./workspace:/workspace                        # bind-mount: drop binaries, read reports
-      - ./skills:/workspace/.agents/skills:ro         # RE skills (read-only)
+      - cyberhawk-data:/workspace
     environment:
-      - JAVA_OPTS=-Xmx4g -XX:+UseG1GC               # Increase to -Xmx8g for large binaries
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8089/check_connection"]
-      interval: 30s
-      timeout: 10s
-      start_period: 90s
-      retries: 3
+      - JAVA_OPTS=-Xmx4g -XX:+UseG1GC
     networks:
-      - re-net
+      - cyberhawk-net
+
+volumes:
+  cyberhawk-data:
+    driver: local
 
 networks:
-  re-net:
+  cyberhawk-net:
     driver: bridge
